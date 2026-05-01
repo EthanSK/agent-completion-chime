@@ -21,16 +21,35 @@ Two distinct sounds. No notification spam, no Electron, no menubar app. Just a c
 
 ## Install
 
+### One-shot install (recommended)
+
+Clone the repo somewhere, then:
+
+```
+bash scripts/install.sh
+```
+
+This wires the plugin into:
+
+- **Claude Code** — registers as a directory-source plugin marketplace + enabled plugin in `~/.claude/settings.json`. Adds `Stop` and `SubagentStop` hooks that call `chime end --from-claude-stop` / `chime end --from-claude-subagent`. The MCP server (9 config tools) loads on next session start.
+- **OpenClaw** — registers `plugins.entries.agent-completion-chime` and adds the repo path to `plugins.load.paths` in `~/.openclaw/openclaw.json`.
+- **launchd** — installs `~/Library/LaunchAgents/com.ethansk.agent-completion-chime.watcher.plist`, a `KeepAlive` LaunchAgent that runs `scripts/openclaw-watcher.js`. The watcher tails `~/.openclaw/subagents/runs.json` and translates OpenClaw run state changes into chime start/end events.
+
+Idempotent. Safe to re-run. Backs up touched files to `*.bak.<unix-ts>` first. Run `bash scripts/install.sh --dry-run` to preview, `--uninstall` to remove. Verify with:
+
+```
+node bin/chime.js install-status
+```
+
+After install you must **fully restart Claude Code** to load the new MCP server (per the `~/.claude/CLAUDE.md` `/reload-plugins is NOT a hot-reload` rule).
+
+### npm-only install (no harness wiring)
+
 ```
 npm install -g agent-completion-chime
 ```
 
-This installs two binaries:
-
-- `chime` — thin CLI used by Stop / SubagentStop / on-exit hooks.
-- `agent-completion-chime-mcp` — MCP stdio server used by your agent to configure things.
-
-State and config live in `~/.agent-completion-chime/`.
+This installs two binaries — `chime` (CLI) and `agent-completion-chime-mcp` (MCP stdio server) — but does NOT wire them into Claude Code or OpenClaw. State and config live in `~/.agent-completion-chime/`.
 
 ## Hook into Claude Code
 
@@ -141,6 +160,7 @@ chime config set volume 0.7
 chime test per-agent | all-complete
 chime enable | disable
 chime reset                            # clears active runs
+chime install-status [--json]          # Y/N truth-table of CC + OC + watcher wiring
 ```
 
 ## State

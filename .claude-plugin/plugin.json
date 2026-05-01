@@ -1,0 +1,24 @@
+{
+  "name": "agent-completion-chime",
+  "description": "Make a sound when AI agents finish. Per-agent chime on Stop / SubagentStop, all-complete chime when the active-agent set drains. Configurable via 9 MCP tools (chime_status, chime_list_sounds, chime_set_per_agent_sound, chime_set_all_complete_sound, chime_set_volume, chime_enable, chime_disable, chime_test, chime_reset_active). macOS only.",
+  "version": "0.2.0",
+  "author": {
+    "name": "EthanSK",
+    "url": "https://github.com/EthanSK/agent-completion-chime"
+  },
+  "homepage": "https://github.com/EthanSK/agent-completion-chime",
+  "repository": "https://github.com/EthanSK/agent-completion-chime",
+  "license": "MIT",
+  "keywords": [
+    "agent-completion-chime",
+    "mcp",
+    "chime",
+    "macos",
+    "afplay",
+    "hook",
+    "stop",
+    "subagent",
+    "claude-code",
+    "openclaw"
+  ]
+}

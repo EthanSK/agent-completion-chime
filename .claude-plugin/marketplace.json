@@ -1,0 +1,32 @@
+{
+  "name": "agent-completion-chime",
+  "owner": {
+    "name": "EthanSK",
+    "url": "https://github.com/EthanSK/agent-completion-chime"
+  },
+  "metadata": {
+    "description": "Local marketplace for the agent-completion-chime Claude Code plugin — MCP server (9 tools to configure / preview / reset chime sounds) plus Stop & SubagentStop hooks that fire a per-agent chime on completion and an all-complete chime when the active set drains."
+  },
+  "plugins": [
+    {
+      "name": "agent-completion-chime",
+      "description": "Plays a macOS sound (Glass.aiff per agent, Hero.aiff when all parallel agents finish) on Claude Code Stop / SubagentStop and OpenClaw run completions. Exposes 9 MCP tools for configuration: chime_status, chime_list_sounds, chime_set_per_agent_sound, chime_set_all_complete_sound, chime_set_volume, chime_enable, chime_disable, chime_test, chime_reset_active.",
+      "category": "productivity",
+      "source": ".",
+      "homepage": "https://github.com/EthanSK/agent-completion-chime",
+      "keywords": [
+        "agent-completion-chime",
+        "mcp",
+        "chime",
+        "macos",
+        "afplay",
+        "hook",
+        "stop",
+        "subagent",
+        "claude-code",
+        "openclaw",
+        "notification"
+      ]
+    }
+  ]
+}

@@ -26,7 +26,10 @@
  * the host on us. We swallow most errors and log them.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   markStart,
   markEnd,
@@ -178,6 +181,123 @@ function cmdReset() {
   console.log(formatJson({ ok: true, active: Object.keys(state.active).length }));
 }
 
+/**
+ * `chime install-status` — wiring truth-table.
+ *
+ * Reports each integration surface as Y/N so `install.sh` can be verified
+ * end-to-end without restarting the harness:
+ *   - MCP server registered in ~/.claude/settings.json
+ *   - Stop / SubagentStop hooks pointing at this chime.js
+ *   - OpenClaw plugin entry + load path
+ *   - launchd LaunchAgent loaded + watcher PID alive
+ *   - Last-fired summary from chime.log
+ */
+function cmdInstallStatus(args) {
+  const flags = parseFlags(args).flags;
+  const HOME = homedir();
+  const settingsPath = join(HOME, '.claude', 'settings.json');
+  const ocPath = join(HOME, '.openclaw', 'openclaw.json');
+  const plistLabel = 'com.ethansk.agent-completion-chime.watcher';
+  const plistPath = join(HOME, 'Library', 'LaunchAgents', `${plistLabel}.plist`);
+
+  const repoRoot = join(import.meta.url ? new URL('..', import.meta.url).pathname : '.', '');
+  const chimeBinPath = join(repoRoot, 'bin', 'chime.js');
+
+  const readJson = (p) => {
+    if (!existsSync(p)) return null;
+    try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; }
+  };
+
+  // ---- Claude Code wiring -------------------------------------------------
+  const settings = readJson(settingsPath);
+  const cc = {
+    settings_present: !!settings,
+    marketplace_registered: !!settings?.extraKnownMarketplaces?.['agent-completion-chime'],
+    plugin_enabled: !!settings?.enabledPlugins?.['agent-completion-chime@agent-completion-chime'],
+    stop_hook: false,
+    subagent_stop_hook: false,
+  };
+  for (const [evt, key] of [['Stop', 'stop_hook'], ['SubagentStop', 'subagent_stop_hook']]) {
+    const groups = settings?.hooks?.[evt] || [];
+    for (const g of groups) {
+      for (const h of g.hooks || []) {
+        if (typeof h?.command === 'string' && h.command.includes('agent-completion-chime')) {
+          cc[key] = true;
+        }
+      }
+    }
+  }
+
+  // ---- OpenClaw wiring ----------------------------------------------------
+  const oc = readJson(ocPath);
+  const ocStatus = {
+    config_present: !!oc,
+    plugin_entry: !!oc?.plugins?.entries?.['agent-completion-chime'],
+    load_path: Array.isArray(oc?.plugins?.load?.paths)
+      && oc.plugins.load.paths.some((x) => typeof x === 'string' && x.includes('agent-completion-chime')),
+  };
+
+  // ---- launchd watcher ----------------------------------------------------
+  const watcher = { plist_present: existsSync(plistPath), launchctl_loaded: false, pid: null };
+  try {
+    const out = execFileSync('/bin/launchctl', ['list'], { encoding: 'utf8' });
+    for (const line of out.split('\n')) {
+      if (line.includes(plistLabel)) {
+        const cols = line.trim().split(/\s+/);
+        watcher.launchctl_loaded = true;
+        const pidStr = cols[0];
+        watcher.pid = pidStr === '-' ? null : Number(pidStr);
+        break;
+      }
+    }
+  } catch {}
+
+  // ---- Last-fired summary -------------------------------------------------
+  const stat = statusSnapshot();
+  const lastFire = {
+    last_per_agent_ts: stat.last_per_agent_ts || 0,
+    last_all_done_ts: stat.last_all_done_ts || 0,
+    active_count: stat.active_count,
+    history_tail: stat.recent_history.slice(-3),
+  };
+
+  const summary = {
+    repo: repoRoot,
+    claude_code: cc,
+    openclaw: ocStatus,
+    watcher,
+    last_fire: lastFire,
+  };
+
+  if (flags.json) {
+    console.log(formatJson(summary));
+    return;
+  }
+
+  // Human-readable truth-table.
+  const yn = (b) => (b ? 'Y' : 'N');
+  console.log('agent-completion-chime — install status');
+  console.log('-----------------------------------------');
+  console.log(`Claude Code  marketplace registered: ${yn(cc.marketplace_registered)}`);
+  console.log(`Claude Code  plugin enabled:         ${yn(cc.plugin_enabled)}`);
+  console.log(`Claude Code  Stop hook:              ${yn(cc.stop_hook)}`);
+  console.log(`Claude Code  SubagentStop hook:      ${yn(cc.subagent_stop_hook)}`);
+  console.log(`OpenClaw     plugin entry:           ${yn(ocStatus.plugin_entry)}`);
+  console.log(`OpenClaw     load path:              ${yn(ocStatus.load_path)}`);
+  console.log(`Watcher      launchd loaded:         ${yn(watcher.launchctl_loaded)}` + (watcher.pid ? `  (pid ${watcher.pid})` : ''));
+  console.log(`State        active runs:            ${lastFire.active_count}`);
+  if (lastFire.last_per_agent_ts) {
+    console.log(`Last         per-agent chime:        ${new Date(lastFire.last_per_agent_ts).toISOString()}`);
+  } else {
+    console.log(`Last         per-agent chime:        (never)`);
+  }
+  if (lastFire.last_all_done_ts) {
+    console.log(`Last         all-complete chime:     ${new Date(lastFire.last_all_done_ts).toISOString()}`);
+  } else {
+    console.log(`Last         all-complete chime:     (never)`);
+  }
+}
+
 function cmdEnable(on) {
   const next = updateConfig({ enabled: on });
   console.log(formatJson({ enabled: next.enabled }));
@@ -198,6 +318,7 @@ Commands:
   chime test per-agent | all-complete
   chime enable | disable
   chime reset                          (clears active runs)
+  chime install-status [--json]        (Y/N truth-table of CC + OC + watcher wiring)
 
 State:    ~/.agent-completion-chime/state.json
 Config:   ~/.agent-completion-chime/config.json
@@ -223,6 +344,8 @@ try {
     case 'reset':           cmdReset(); break;
     case 'enable':          cmdEnable(true); break;
     case 'disable':         cmdEnable(false); break;
+    case 'install-status':
+    case 'wiring':          cmdInstallStatus(rest); break;
     case 'help':
     case '--help':
     case '-h':

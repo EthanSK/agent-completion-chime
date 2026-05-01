@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agent-completion-chime": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/mcp-server.js"
+      ]
+    }
+  }
+}

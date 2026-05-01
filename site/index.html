@@ -108,15 +108,21 @@
           <h2 class="section-title">Install</h2>
         </div>
         <div class="install-grid">
-          <pre class="codeblock"><code><span class="ck">npm install -g</span> agent-completion-chime
-<span class="cm"># test the two default chimes</span>
+          <pre class="codeblock"><code><span class="cm"># one-shot install (Claude Code + OpenClaw + watcher LaunchAgent)</span>
+<span class="ck">git clone</span> https://github.com/EthanSK/agent-completion-chime
+<span class="ck">bash</span> agent-completion-chime/scripts/install.sh
+
+<span class="cm"># or, just the binaries (no harness wiring)</span>
+<span class="ck">npm install -g</span> agent-completion-chime
 <span class="ck">chime test</span> per-agent
 <span class="ck">chime test</span> all-complete</code></pre>
           <ul class="benefits">
+            <li>One-shot installer wires <strong>Claude Code</strong> Stop+SubagentStop hooks, registers as a directory-source plugin, and installs an <strong>OpenClaw</strong> watcher LaunchAgent. Idempotent. <code>--dry-run</code> and <code>--uninstall</code> supported.</li>
             <li>Pure Node + <code>afplay</code>. No Electron, no Swift.</li>
             <li>State in <code>~/.agent-completion-chime/</code>.</li>
             <li>14 built-in macOS sounds, or any <code>.aiff/.wav/.mp3</code>.</li>
             <li>Two binaries: <code>chime</code> (CLI for hooks) + <code>agent-completion-chime-mcp</code> (configure via talking to an agent).</li>
+            <li>Verify wiring with <code>node bin/chime.js install-status</code> — Y/N truth-table.</li>
           </ul>
         </div>
       </section>

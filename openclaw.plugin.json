@@ -1,0 +1,35 @@
+{
+  "id": "agent-completion-chime",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Master enable. Default: true."
+      },
+      "watcherAutoStart": {
+        "type": "boolean",
+        "description": "If true, the install script ensures the OpenClaw subagent-runs watcher launchd job is loaded so chimes fire on OpenClaw run state transitions. Default: true."
+      },
+      "runsPath": {
+        "type": "string",
+        "description": "Override path to the OpenClaw subagent runs registry. Defaults to ~/.openclaw/subagents/runs.json."
+      },
+      "perAgentSound": {
+        "type": "string",
+        "description": "Override the per-agent sound (built-in macOS sound name like Glass, or absolute path)."
+      },
+      "allCompleteSound": {
+        "type": "string",
+        "description": "Override the all-complete sound (built-in macOS sound name like Hero, or absolute path)."
+      },
+      "volume": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Playback volume (0.0–1.0). Forwarded to afplay -v."
+      }
+    }
+  }
+}
