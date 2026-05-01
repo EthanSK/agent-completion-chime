@@ -1,0 +1,51 @@
+{
+  "name": "agent-completion-chime",
+  "version": "0.1.0",
+  "description": "Make a sound when AI agents (Claude Code, OpenClaw, anything) finish — one chime per agent, a different chime when all parallel agents are done. macOS built-in sounds. Configurable by talking to an agent via MCP.",
+  "type": "module",
+  "bin": {
+    "chime": "bin/chime.js",
+    "agent-completion-chime": "bin/chime.js",
+    "agent-completion-chime-mcp": "bin/mcp-server.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE",
+    "ARCHITECTURE.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start:mcp": "node bin/mcp-server.js"
+  },
+  "keywords": [
+    "claude-code",
+    "openclaw",
+    "agent",
+    "mcp",
+    "chime",
+    "macos",
+    "afplay",
+    "hook",
+    "stop",
+    "notification"
+  ],
+  "author": "Ethan Sarif-Kattan <ethaneus99@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/EthanSK/agent-completion-chime",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EthanSK/agent-completion-chime.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
+  },
+  "os": [
+    "darwin"
+  ]
+}
