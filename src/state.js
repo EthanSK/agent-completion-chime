@@ -81,6 +81,34 @@ const DEFAULT_CONFIG = {
   // -------------------------------------------------------------------------
   master_machine: 'Ethans-Mac-mini',
   agent_bridge_path: join(homedir(), 'Projects', 'agent-bridge'),
+  // ---------------------------------------------------------------------------
+  // Post-chime SAY (2026-05-04, voice 6308). After each chime fires, speak
+  // the Telegram BOT USERNAME bound to the active session — that's the name
+  // Ethan sees in his Telegram chat list ("Realclaude4bot", "Lemaciboi5bot")
+  // and recognizes per-persona. Agent task descriptions ("PP testing or
+  // something") were meaningless and got cut on voice 6308.
+  //
+  // - say_bot_name: master toggle. true = speak after each chime,
+  //                 false = silent (chime sound only, legacy behavior).
+  // - bot_names_by_machine: static map { <machine>: <bot_username> } that
+  //                         takes precedence over the auto-derived cache.
+  //                         Hand-edit this when adding new fleet hosts.
+  //                         The auto-derive path (Telegram getMe) only knows
+  //                         about the LOCAL machine's bot, so peer entries
+  //                         must be added here for the master daemon to
+  //                         speak "Lemaciboi5bot subagent complete" when
+  //                         processing an SFTP-forwarded event from MBP.
+  //
+  // The master daemon in agent-bridge/chime/service.mjs reads its own copy
+  // of `bot_names_by_machine` from ~/.agent-bridge/chime/config.json, so a
+  // change here doesn't auto-propagate. Keep the maps in sync (or just rely
+  // on the local-cache for the local machine and the master config for peers).
+  // ---------------------------------------------------------------------------
+  say_bot_name: true,
+  bot_names_by_machine: {
+    'Ethans-Mac-mini': 'Realclaude4bot',
+    'MacBookPro': 'Lemaciboi5bot',
+  },
 };
 
 function ensureRoot() {

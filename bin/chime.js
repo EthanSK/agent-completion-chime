@@ -29,7 +29,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import {
   markStart,
   markEnd,
@@ -41,7 +41,14 @@ import {
   playSound,
   logEvent,
   BUILTIN_SOUNDS,
+  resolveLocalMachineName,
 } from '../src/state.js';
+import {
+  resolveBotNameSync,
+  refreshLocalBotNameCache,
+  speechForChime,
+  shortenMachineNameForSpeech,
+} from '../src/bot-name.js';
 
 function parseFlags(args) {
   const flags = {};
@@ -94,6 +101,44 @@ function runIdFromClaudePayload(payload, hookKind) {
   return { id: String(id), label: String(label) };
 }
 
+/**
+ * Best-effort lookup of the SPOKEN BOT NAME for THIS local machine. We say
+ * the Telegram bot username (e.g. "Realclaude4bot") because that's what
+ * Ethan sees in his Telegram chat list and recognizes per-persona —
+ * agent task descriptions ("PP testing or something") were meaningless
+ * to him. Established 2026-05-04, voice 6308.
+ *
+ * Resolution order: see `src/bot-name.js` docstring.
+ *
+ * Returns the bot username string or null. Caller falls back to a short
+ * machine-name when null.
+ */
+function localBotName(config) {
+  const machine = resolveLocalMachineName();
+  return resolveBotNameSync({ machine, config, local_machine: machine });
+}
+
+/**
+ * Speak a short label after the chime fires. Detached fire-and-forget so the
+ * hook never blocks; small initial delay so the chime isn't drowned out.
+ * `say` is macOS-only; on other platforms this is a no-op (won't error
+ * because spawn fails silently with detached:true and stdio:'ignore').
+ */
+function speakAfterChime(text, delayMs = 600) {
+  if (!text) return;
+  try {
+    const cleaned = String(text).replace(/[`"]/g, '').slice(0, 80);
+    setTimeout(() => {
+      try {
+        spawn('/usr/bin/say', [cleaned], {
+          detached: true,
+          stdio: 'ignore',
+        }).unref();
+      } catch {}
+    }, delayMs);
+  } catch {}
+}
+
 function formatJson(obj) {
   return JSON.stringify(obj, null, 2);
 }
@@ -112,21 +157,70 @@ function cmdEnd(args) {
   let run_id = positional[0];
   let source = flags.source || 'cli';
   let label = flags.label;
+  let hookKind = null;
 
   // Hook adapters — read payload from stdin and derive run_id.
   if (flags['from-claude-hook'] || flags['from-claude-stop']) {
     const payload = readStdinJson();
     const { id, label: l } = runIdFromClaudePayload(payload, 'stop');
     run_id = id; source = 'claude-code'; label = l;
+    hookKind = 'stop';
   } else if (flags['from-claude-subagent']) {
     const payload = readStdinJson();
     const { id, label: l } = runIdFromClaudePayload(payload, 'subagent_stop');
     run_id = id; source = 'claude-code-subagent'; label = l;
+    hookKind = 'subagent_stop';
   }
 
   if (!run_id) die('chime end <run_id> required (or pass --from-claude-hook / --from-claude-subagent)');
   const { state, played } = markEnd({ run_id, source, label });
-  if (!flags.quiet) console.log(formatJson({ ok: true, active: Object.keys(state.active).length, played }));
+
+  // ---------------------------------------------------------------------------
+  // Post-chime SAY — speaks the Telegram bot name bound to the LOCAL machine
+  // (e.g. "Realclaude4bot all complete"). Established 2026-05-04, voice 6308:
+  //
+  //   "I wanted to try and be the Telegram name that I'm communicating with,
+  //    because that's the one I see, right? The name of the bot."
+  //
+  // Resolution lives in src/bot-name.js: static map first, cached getMe
+  // fallback, then short machine-name (e.g. "Mac mini all complete") if the
+  // bot name can't be derived. Toggle with `say_bot_name: false` in config.
+  //
+  // Cooldown / dedup: when both per-agent AND all-complete fire for the same
+  // hook (the typical "last subagent" case), we say ONLY all-complete — it's
+  // the more informative boundary, and double-speech-on-one-event is the
+  // very thing voice 6308 was annoyed about.
+  //
+  // Peer mode (forwarded.role === 'peer'): no local play, no local say. The
+  // master's chime daemon (agent-bridge/chime/service.mjs) speaks the peer's
+  // bot name when it processes the forwarded event.
+  // ---------------------------------------------------------------------------
+  let spokenPhrase = null;
+  const config = loadConfig();
+  const sayEnabled = config?.say_bot_name !== false;
+  if (sayEnabled && hookKind && (played?.all_complete || played?.per_agent)) {
+    const localMachine = resolveLocalMachineName();
+    const botName = localBotName(config);
+    const fallback = shortenMachineNameForSpeech(localMachine);
+    const speechKind = played.all_complete ? 'all_complete' : 'per_agent';
+    spokenPhrase = speechForChime({
+      kind: speechKind,
+      bot_name: botName,
+      machine_fallback: fallback,
+    });
+    if (spokenPhrase) {
+      // All-complete sound has its own ~350ms staggered start (state.js).
+      // Wait long enough that say doesn't talk over Hero/Glass.
+      const delay = played.all_complete ? 1200 : 600;
+      speakAfterChime(spokenPhrase, delay);
+    }
+    // Best-effort: kick off an async refresh of the local bot-name cache so
+    // the next chime fires with a fresh name even if our token rotated.
+    // Detached fire-and-forget — never blocks the hook return.
+    refreshLocalBotNameCache({ local_machine: localMachine }).catch(() => {});
+  }
+
+  if (!flags.quiet) console.log(formatJson({ ok: true, active: Object.keys(state.active).length, played, spokenPhrase }));
 }
 
 function cmdStatus() {
@@ -147,6 +241,19 @@ function cmdConfig(args) {
     if (!key) die('chime config set <key> <value>');
     let value = rest.join(' ');
     if (key === 'enabled') value = (value === 'true' || value === '1');
+    else if (key === 'say_bot_name') value = (value === 'true' || value === '1');
+    else if (key === 'bot_names_by_machine') {
+      // Accept JSON object — `chime config set bot_names_by_machine '{"MBP":"foo"}'`
+      try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          die('bot_names_by_machine must be a JSON object {<machine>: <bot_username>}');
+        }
+        value = parsed;
+      } catch (e) {
+        die(`invalid JSON for bot_names_by_machine: ${e.message}`);
+      }
+    }
     else if (key === 'volume') value = Number(value);
     else if (key === 'stale_run_seconds' || key === 'all_complete_cooldown') value = Number(value);
     else if (key === 'per_agent_sound' || key === 'all_complete_sound') {
