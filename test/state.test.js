@@ -108,6 +108,79 @@ test('statusSnapshot exposes current state', () => {
   assert.ok(Array.isArray(snap.recent_history));
 });
 
+// -- Mini-as-master peer-mode tests (2026-05-04) -----------------------------
+
+test('roleForLocal returns master when local machine matches master_machine', async () => {
+  process.env.AGENT_BRIDGE_MACHINE_NAME = 'Ethans-Mac-mini';
+  const { roleForLocal } = await import('../src/state.js');
+  const role = roleForLocal({ master_machine: 'Ethans-Mac-mini' });
+  assert.equal(role, 'master');
+  delete process.env.AGENT_BRIDGE_MACHINE_NAME;
+});
+
+test('roleForLocal returns peer when local machine differs from master_machine', async () => {
+  process.env.AGENT_BRIDGE_MACHINE_NAME = 'MacBookPro';
+  const { roleForLocal } = await import('../src/state.js');
+  const role = roleForLocal({ master_machine: 'Ethans-Mac-mini' });
+  assert.equal(role, 'peer');
+  delete process.env.AGENT_BRIDGE_MACHINE_NAME;
+});
+
+test('roleForLocal returns standalone when master_machine is null', async () => {
+  process.env.AGENT_BRIDGE_MACHINE_NAME = 'MacBookPro';
+  const { roleForLocal } = await import('../src/state.js');
+  assert.equal(roleForLocal({ master_machine: null }), 'standalone');
+  delete process.env.AGENT_BRIDGE_MACHINE_NAME;
+});
+
+test('peer-mode markEnd does NOT play locally and skips state.last_per_agent_ts', async () => {
+  process.env.AGENT_BRIDGE_MACHINE_NAME = 'MacBookPro';
+  // Point agent_bridge_path at a non-existent path so forwardEndEventToMaster
+  // returns delivered=none WITHOUT actually trying SSH.
+  updateConfig({ master_machine: 'Ethans-Mac-mini', agent_bridge_path: '/nonexistent-path' });
+  // Clear any state mutations from earlier tests in the file.
+  const { writeFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  writeFileSync(join(tmpHome, 'state.json'), JSON.stringify({
+    active: {}, last_all_done_ts: 0, last_per_agent_ts: 0, history: [],
+  }));
+  markStart({ run_id: 'p1', source: 'test' });
+  const tsBefore = loadState().last_per_agent_ts || 0;
+  const r = markEnd({ run_id: 'p1', source: 'test' });
+  // played.per_agent is FALSE because peer-mode skips local play
+  assert.equal(r.played.per_agent, false, 'peer-mode does not play locally');
+  assert.equal(r.played.all_complete, false);
+  assert.equal(r.forwarded.role, 'peer');
+  // last_per_agent_ts is NOT bumped on peer (only master mutates it)
+  const tsAfter = loadState().last_per_agent_ts || 0;
+  assert.equal(tsAfter, tsBefore, 'peer-mode must not mutate last_per_agent_ts');
+  // Restore for subsequent tests
+  updateConfig({ master_machine: 'Ethans-Mac-mini', agent_bridge_path: undefined });
+  delete process.env.AGENT_BRIDGE_MACHINE_NAME;
+});
+
+test('master-mode markEnd plays locally as before', async () => {
+  process.env.AGENT_BRIDGE_MACHINE_NAME = 'Ethans-Mac-mini';
+  updateConfig({ master_machine: 'Ethans-Mac-mini' });
+  resetActive();
+  markStart({ run_id: 'm1', source: 'test' });
+  const r = markEnd({ run_id: 'm1', source: 'test' });
+  assert.equal(r.played.per_agent, true, 'master-mode plays locally');
+  delete process.env.AGENT_BRIDGE_MACHINE_NAME;
+});
+
+test('standalone-mode (master_machine=null) plays locally', async () => {
+  process.env.AGENT_BRIDGE_MACHINE_NAME = 'MacBookPro';
+  updateConfig({ master_machine: null });
+  resetActive();
+  markStart({ run_id: 's1', source: 'test' });
+  const r = markEnd({ run_id: 's1', source: 'test' });
+  assert.equal(r.played.per_agent, true, 'standalone-mode plays locally');
+  // Restore
+  updateConfig({ master_machine: 'Ethans-Mac-mini' });
+  delete process.env.AGENT_BRIDGE_MACHINE_NAME;
+});
+
 test.after?.(() => {
   if (existsSync(tmpHome)) rmSync(tmpHome, { recursive: true, force: true });
 });

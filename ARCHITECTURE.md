@@ -102,13 +102,65 @@ The MCP server exposes:
 - **OpenClaw integration** in v0.1 ships as a skill+CLI hook the user wires
   manually (drop a one-liner into the OpenClaw subagent finalizer script
   Ethan already uses). A fsnotify watcher on `runs.json` is a v0.2 follow-up.
-- **No cross-machine state** — each machine has its own state file. If you're
-  running parallel agents on Mac Mini AND MBP and want one chime when ALL
-  machines are idle, that's a v0.2 feature (could ride on agent-bridge).
+- ~~**No cross-machine state**~~ — addressed in v0.3.0 via Mini-as-master
+  forwarding (see "Mini-as-master architecture" below).
 - **No volume control** beyond afplay's default — easy to add `-v 0..1` flag
   later.
 - **macOS only** in v0.1 (afplay-dependent). Linux/Windows fallback to a tiny
   `node-speaker` or `aplay`/`powershell beep` as a v0.2 nice-to-have.
+
+## Mini-as-master architecture (v0.3.0, 2026-05-04)
+
+When running across multiple paired Macs, the chime fires on ONE machine only —
+the designated "master". Peers forward their completion events to the master
+via SFTP (powered by `EthanSK/agent-bridge`) instead of playing locally.
+
+### Why
+
+There's only one human at the desk. The pre-v0.3.0 model played a chime on
+EVERY paired Mac when ANY agent finished on ANY of them — redundant and
+annoying. The Mini-as-master model designates a single sole-player so the
+audible feedback isn't fan-out spam.
+
+Decision context: Ethan voice 6286, 2026-05-04. "the Mac Mini is like the one
+playing it, so they all have to tell the Mac Mini or whatever the master one
+is that they're done."
+
+### How
+
+```
+   peer machine (e.g. MacBookPro)              master machine (Mini)
+   ┌───────────────────────────┐               ┌───────────────────────────┐
+   │ Claude Code Stop hook     │               │ ~/.agent-bridge/inbox/    │
+   │   ↓                       │               │   agent-bridge/chime/     │
+   │ chime.js end --from-...   │   SFTP ──→   │   <id>.json               │
+   │   ↓ role=peer             │               │   ↓ daemon polls (2s)    │
+   │ markEnd → forward         │               │ chime/service.mjs         │
+   │ Skip local playback       │               │   processInboxOnce()      │
+   └───────────────────────────┘               │   ↓ applyControlEvent     │
+                                               │   ↓ playSound(Glass)      │
+                                               │     [+ Hero on idle]      │
+                                               └───────────────────────────┘
+```
+
+- `master_machine` in `~/.agent-completion-chime/config.json` selects the
+  sole-player. Default `"Ethans-Mac-mini"`. Set to `null` for legacy local-play
+  on every machine.
+- `agent_bridge_path` points to a checkout of `EthanSK/agent-bridge`. Defaults
+  to `~/Projects/agent-bridge`. The standalone CLI dynamically imports
+  `chime/emitter.mjs` from that path to reuse the bridge's SFTP machinery.
+- If forwarding fails (master unreachable, agent-bridge not installed), the
+  CLI falls back to local play. Better to chime on the wrong machine than to
+  drop the audio cue silently.
+- The master's daemon (`agent-bridge/chime/service.mjs`) also keeps a peer
+  registry at `~/.agent-bridge/chime/peers.json`. Peers send `chime.register`
+  on daemon startup and refresh via heartbeats. Today the registry is
+  informational (peers can forward without prior register) — useful for
+  debugging fleet wiring.
+- Bonus UX: the master plays peer-originated chimes at a slightly higher
+  pitch (afplay `-r 1.05`) so Ethan can audibly distinguish "from the laptop"
+  from "from the desk". Disable with `remotePitchRate: 1` in the bridge-side
+  chime config.
 
 ## Risks the user flagged in the brief
 

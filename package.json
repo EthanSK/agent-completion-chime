@@ -1,6 +1,6 @@
 {
   "name": "agent-completion-chime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Make a sound when AI agents (Claude Code, OpenClaw, anything) finish — one chime per agent, a different chime when all parallel agents are done. macOS built-in sounds. Configurable by talking to an agent via MCP.",
   "type": "module",
   "bin": {
