@@ -58,7 +58,11 @@ export const BUILTIN_SOUNDS = [
 ];
 
 const DEFAULT_CONFIG = {
-  enabled: true,
+  // Default OFF for new setups (Ethan voice 6328, 2026-05-04: "don't have
+  // it on by default for new setups of Agent Bridge. But if I want to enable
+  // it, it should be able to be enabled.") Flip to true via `chime enable`
+  // or by editing ~/.agent-completion-chime/config.json.
+  enabled: false,
   per_agent_sound: 'Glass',     // any built-in or absolute path to .aiff/.wav/.mp3
   all_complete_sound: 'Hero',
   volume: 1.0,                  // 0.0–1.0 (passed to afplay -v)
@@ -105,10 +109,11 @@ const DEFAULT_CONFIG = {
   // on the local-cache for the local machine and the master config for peers).
   // ---------------------------------------------------------------------------
   say_bot_name: true,
-  bot_names_by_machine: {
-    'Ethans-Mac-mini': 'Realclaude4bot',
-    'MacBookPro': 'Lemaciboi5bot',
-  },
+  // Static map maps machine → chat-display name (Telegram first_name, e.g.
+  // "Claude Code 4"). Empty by default so each host auto-derives its own
+  // via getMe.first_name. Peer entries (MBP/Dell from Mini's POV) can be
+  // hand-populated when auto-derive can't reach a peer's token.
+  bot_names_by_machine: {},
 };
 
 function ensureRoot() {

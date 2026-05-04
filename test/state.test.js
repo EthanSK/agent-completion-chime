@@ -29,7 +29,8 @@ const {
 
 test('default config bootstraps on first read', () => {
   const cfg = loadConfig();
-  assert.equal(cfg.enabled, true);
+  // Voice 6328 (2026-05-04): default OFF for new setups.
+  assert.equal(cfg.enabled, false);
   assert.equal(cfg.per_agent_sound, 'Glass');
   assert.equal(cfg.all_complete_sound, 'Hero');
 });
@@ -51,8 +52,9 @@ test('markStart adds to active set', () => {
 
 test('markEnd decrements and only fires all-complete on empty', () => {
   resetActive();
-  // Disable sound by setting volume to 0 — afplay still spawns, but inaudible.
-  // The state machine doesn't depend on actually playing.
+  // Default config has enabled=false now (voice 6328 default-off). Enable
+  // for THIS test since it asserts the played flags fire on hooks.
+  updateConfig({ enabled: true });
   markStart({ run_id: 'b1' });
   markStart({ run_id: 'b2' });
   const r1 = markEnd({ run_id: 'b1' });

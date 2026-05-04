@@ -64,25 +64,28 @@ test('resolveBotNameSync ignores stale cache entries', () => {
   assert.equal(name, null);
 });
 
-test('speechForChime builds correct strings', () => {
+test('speechForChime returns just the name (no suffix)', () => {
+  // Voice 6317 (2026-05-04): "don't you have to say sub agent complete?
+  // Just the name and the chime." No "all complete" / "subagent complete"
+  // suffix — let the chime audio carry the meaning.
   assert.equal(
-    speechForChime({ kind: 'all_complete', bot_name: 'Realclaude4bot', machine_fallback: 'Mini' }),
-    'Realclaude4bot all complete',
+    speechForChime({ kind: 'all_complete', bot_name: 'Claude Code 4', machine_fallback: 'Mini' }),
+    'Claude Code 4',
   );
   assert.equal(
-    speechForChime({ kind: 'per_agent', bot_name: 'Lemaciboi5bot', machine_fallback: 'MBP' }),
-    'Lemaciboi5bot subagent complete',
+    speechForChime({ kind: 'per_agent', bot_name: 'Claude Code 4', machine_fallback: 'MBP' }),
+    'Claude Code 4',
   );
 });
 
 test('speechForChime falls back to machine name when no bot name', () => {
   assert.equal(
     speechForChime({ kind: 'all_complete', bot_name: null, machine_fallback: 'Mac mini' }),
-    'Mac mini all complete',
+    'Mac mini',
   );
   assert.equal(
     speechForChime({ kind: 'per_agent', bot_name: '', machine_fallback: 'MacBookPro' }),
-    'MacBookPro subagent complete',
+    'MacBookPro',
   );
 });
 
@@ -130,16 +133,19 @@ test('refreshLocalBotNameCache uses cached value within TTL without calling fetc
   assert.equal(fetchCalled, false, 'should not call fetch when cache is fresh');
 });
 
-test('fetchBotUsernameFromTelegram returns username from getMe-like response', async () => {
+test('fetchBotUsernameFromTelegram returns first_name from getMe-like response', async () => {
+  // Voice 6317 (2026-05-04): use the chat-display first_name (e.g. "Claude
+  // Code 4") instead of the username ("Realclaude4bot") so the spoken label
+  // matches what Ethan sees in his Telegram chat list.
   const fakeFetch = async (url) => {
     assert.ok(url.startsWith('https://api.telegram.org/bot'));
     return {
       ok: true,
-      json: async () => ({ ok: true, result: { id: 123, username: 'TestBot' } }),
+      json: async () => ({ ok: true, result: { id: 123, first_name: 'Claude Code 4', username: 'Realclaude4bot' } }),
     };
   };
   const name = await fetchBotUsernameFromTelegram('fake-token', { fetchImpl: fakeFetch });
-  assert.equal(name, 'TestBot');
+  assert.equal(name, 'Claude Code 4');
 });
 
 test('fetchBotUsernameFromTelegram returns null on failed response', async () => {
@@ -168,7 +174,7 @@ test('refreshLocalBotNameCache forceRefresh calls fetch even on fresh cache', as
   let fetchCalled = false;
   const fakeFetch = async () => {
     fetchCalled = true;
-    return { ok: true, json: async () => ({ ok: true, result: { username: 'NewBot' } }) };
+    return { ok: true, json: async () => ({ ok: true, result: { first_name: 'NewBot' } }) };
   };
   const result = await refreshLocalBotNameCache({
     local_machine: 'ForceHost',
