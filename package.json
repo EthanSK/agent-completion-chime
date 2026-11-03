@@ -32,7 +32,7 @@
     "notification"
   ],
   "author": "Ethan Sarif-Kattan <ethaneus99@gmail.com>",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "homepage": "https://github.com/EthanSK/agent-completion-chime",
   "repository": {
     "type": "git",

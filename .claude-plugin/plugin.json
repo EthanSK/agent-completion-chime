@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/EthanSK/agent-completion-chime",
   "repository": "https://github.com/EthanSK/agent-completion-chime",
-  "license": "LicenseRef-Ethan-No-Sale-1.0",
+  "license": "MIT",
   "keywords": [
     "agent-completion-chime",
     "mcp",
